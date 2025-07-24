@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Summarize Image</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary-color: #dbdbe2;
+      --primary-dark: #00c3a4;
+      --bg-overlay: rgba(0, 0, 0, 0.7);
+      --card-bg: rgba(255, 255, 255, 0.08);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    body {
+      background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)),
+                  url('https://source.unsplash.com/1600x900/?abstract,data');
+      background-size: cover;
+      background-position: center;
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    nav {
+      background-color: rgb(19, 11, 125);
+      padding: 15px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      backdrop-filter: blur(8px);
+    }
+
+    nav a {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 6px;
+      transition: 0.3s ease;
+    }
+
+    nav a:hover {
+      background-color: var(--primary-dark);
+      color: white;
+    }
+
+    .container {
+      max-width: 600px;
+      background: var(--bg-overlay);
+      margin: 50px auto;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 0 25px rgb(19, 11, 125);
+      backdrop-filter: blur(10px);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 25px;
+      font-size: 1.7rem;
+      color: var(--primary-color);
+    }
+
+    input[type="file"],
+    button,
+    .download-btn {
+      width: 100%;
+      margin: 15px 0;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.3s ease;
+    }
+
+    input[type="file"] {
+      background-color: #fff;
+      color: rgb(19, 11, 125);
+    }
+
+    button,
+    .download-btn {
+      background-color: var(--primary-color);
+      color: #000;
+    }
+
+    button:hover,
+    .download-btn:hover {
+      background-color: var(--primary-dark);
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 255, 208, 0.2);
+    }
+
+    .summary-box {
+      margin-top: 25px;
+      padding: 20px;
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--primary-color);
+      box-shadow: 0 0 12px rgba(0, 255, 208, 0.2);
+    }
+
+    .summary-box h3 {
+      margin-bottom: 10px;
+      color: var(--primary-color);
+    }
+
+    .summary-box p {
+      line-height: 1.6;
+      color: #e0e0e0;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        margin: 30px 20px;
+        padding: 20px;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+      }
+
+      input[type="file"],
+      button,
+      .download-btn {
+        font-size: 0.95rem;
+        padding: 10px;
+      }
+
+      nav a {
+        padding: 6px 10px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <a href="{{ url_for('home') }}">Home</a>
+    <a href="{{ url_for('summarize_text') }}">Text</a>
+    <a href="{{ url_for('summarize_image') }}">Image</a>
+    <a href="{{ url_for('summarize_pdf') }}">PDF</a>
+    <a href="{{ url_for('summarize_url') }}">URL</a>
+    <a href="{{ url_for('login') }}">Login</a>
+    <a href="{{ url_for('register') }}">Register</a>
+  </nav>
+
+  <!-- Main Section -->
+  <div class="container">
+    <h2>📷 Summarize Image Text</h2>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="image_file" accept="image/*" required />
+      <button type="submit">Summarize Image</button>
+    </form>
+
+    {% if summary %}
+    <div class="summary-box">
+      <h3>Summary:</h3>
+      <p>{{ summary }}</p>
+
+      {% if keywords %}
+      <p><strong>🔑 Keywords:</strong> {{ keywords|join(', ') }}</p>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('download_pdf') }}">
+        <input type="hidden" name="title" value="Image Summary" />
+        <input type="hidden" name="summary" value="{{ summary }}" />
+        <input type="hidden" name="keywords" value="{{ keywords|join(', ') }}" />
+        <button type="submit" class="download-btn">⬇️ Download as PDF</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+</body>
+</html>

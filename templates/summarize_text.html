@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text Summarizer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background-color: #f0f6ff;
+      color: #2c3e50;
+    }
+
+    nav {
+      background-color: #002147;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    nav a {
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: background 0.3s;
+    }
+
+    nav a:hover {
+      color: #00d4ff;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .container {
+      background: #ffffff;
+      padding: 30px;
+      max-width: 700px;
+      margin: 60px auto;
+      border-radius: 15px;
+      box-shadow: 0 0 20px rgba(0, 123, 255, 0.1);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2c7be5;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccd6f6;
+      resize: vertical;
+      height: 200px;
+      background-color: #f8fbff;
+    }
+
+    button,
+    .download-btn {
+      margin-top: 15px;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button {
+      background-color: #2c7be5;
+      color: white;
+    }
+
+    button:hover {
+      background-color: #1b5dc9;
+    }
+
+    .download-btn {
+      background-color: #0088cc;
+      color: white;
+    }
+
+    .download-btn:hover {
+      background-color: #006aa8;
+    }
+
+    .summary-box {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f0f6ff;
+      border-radius: 10px;
+      color: #333;
+      border: 1px solid #cce0ff;
+    }
+
+    .summary-box h3 {
+      color: #2c7be5;
+      margin-bottom: 10px;
+    }
+
+    .keywords {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #1b5dc9;
+    }
+
+    @media (max-width: 768px) {
+      nav {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .container {
+        margin: 40px 15px;
+        padding: 20px;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+      }
+
+      textarea {
+        font-size: 15px;
+      }
+
+      button, .download-btn {
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <a href="{{ url_for('home') }}">Home</a>
+    <a href="{{ url_for('summarize_text') }}">Text Summarizer</a>
+    <a href="{{ url_for('summarize_image') }}">Image Summarizer</a>
+    <a href="{{ url_for('summarize_pdf') }}">PDF Summarizer</a>
+    <a href="{{ url_for('summarize_url') }}">Summarize URL</a>
+    <a href="{{ url_for('login') }}">Login</a>
+    <a href="{{ url_for('register') }}">Register</a>
+  </nav>
+
+  <!-- Main Section -->
+  <div class="container">
+    <h2>📝 Text Summarizer</h2>
+    <form method="POST">
+      <textarea name="text" placeholder="Paste your text here..." required></textarea><br>
+      <button type="submit">Summarize</button>
+    </form>
+
+    {% if summary %}
+      <div class="summary-box">
+        <h3>Summary:</h3>
+        <p>{{ summary }}</p>
+
+        {% if keywords %}
+          <p class="keywords">🔑 Keywords: {{ keywords|join(', ') }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('download_pdf') }}">
+          <input type="hidden" name="title" value="Text Summary" />
+          <input type="hidden" name="summary" value="{{ summary }}" />
+          <input type="hidden" name="keywords" value="{{ keywords|join(', ') }}" />
+          <button type="submit" class="download-btn">⬇️ Download as PDF</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+</body>
+</html>
