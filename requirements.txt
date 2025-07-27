@@ -1,0 +1,10 @@
+Flask==2.3.2
+pytesseract==0.3.10
+Pillow==10.0.1
+PyPDF2==3.0.1
+nltk==3.8.1
+beautifulsoup4==4.12.2
+requests==2.31.0
+reportlab==4.0.4
+python-dotenv==1.0.0
+gunicorn==21.2.0
