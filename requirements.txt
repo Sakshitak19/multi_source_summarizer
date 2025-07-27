@@ -1,6 +1,6 @@
-Flask==2.3.2
+Flask==3.0.0
 pytesseract==0.3.10
-Pillow==10.0.1
+Pillow==10.2.0
 PyPDF2==3.0.1
 nltk==3.8.1
 beautifulsoup4==4.12.2
