@@ -1,214 +1,370 @@
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, send_file
 import pytesseract
 from PIL import Image
 import PyPDF2
 import nltk
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize, RegexpTokenizer
 import heapq
 import requests
 from bs4 import BeautifulSoup
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+import re
+from urllib.parse import urlparse
+import os
 
-# Download NLTK resources
-nltk.download('punkt')
-nltk.download('stopwords')
+# Initialize NLTK data (important for PythonAnywhere)
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
 
-# Tesseract path
-pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+# Configure Tesseract path (different for PythonAnywhere)
+if not os.name == 'nt':  # Not Windows (for PythonAnywhere)
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 app = Flask(__name__)
-app.secret_key = 'secret'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-db = SQLAlchemy(app)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
-# Database model
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True)
-    password = db.Column(db.String(150))
+def preprocess_text(text):
+    """Clean and preprocess text for better summarization"""
+    if not text:
+        return ""
+    # Remove special characters and extra whitespace
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'[^\w\s.,;:!?]', '', text)  # Keep basic punctuation
+    return text.strip()
 
-# Helper: Paragraph summary
-def summarize_paragraph(para):
-    stop_words = set(stopwords.words("english"))
-    words = word_tokenize(para.lower())
-    word_frequencies = {}
+def get_key_phrases(text, num_phrases=5):
+    """Extract key phrases from text"""
+    if not text:
+        return []
+    
+    tokenizer = RegexpTokenizer(r'\w+')
+    words = tokenizer.tokenize(text.lower())
+    stop_words = set(stopwords.words('english'))
+    
+    # Filter out stopwords and short words
+    filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
+    
+    # Create frequency distribution
+    freq_dist = nltk.FreqDist(filtered_words)
+    
+    # Get most common phrases (2-3 word combinations)
+    bigrams = list(nltk.ngrams(filtered_words, 2))
+    trigrams = list(nltk.ngrams(filtered_words, 3))
+    
+    phrases = []
+    for ngram in bigrams + trigrams:
+        phrase = ' '.join(ngram)
+        if phrase in text.lower():
+            phrases.append(phrase)
+    
+    # Get most frequent phrases
+    phrase_freq = nltk.FreqDist(phrases)
+    return [phrase[0] for phrase in phrase_freq.most_common(num_phrases)]
 
-    for word in words:
-        if word.isalpha() and word not in stop_words:
-            word_frequencies[word] = word_frequencies.get(word, 0) + 1
+def simplify_language(text):
+    """Simplify complex language for better readability"""
+    if not text:
+        return ""
+    
+    replacements = {
+        "however": "but",
+        "therefore": "so",
+        "nevertheless": "still",
+        "consequently": "so",
+        "furthermore": "also",
+        "moreover": "also",
+        "thus": "so",
+        "hence": "so",
+        "although": "though",
+        "utilize": "use"
+    }
+    for word, replacement in replacements.items():
+        text = re.sub(r'\b' + word + r'\b', replacement, text, flags=re.IGNORECASE)
+    return text
 
-    sentences = sent_tokenize(para)
+def generate_structured_summary(text):
+    """Generate a well-structured summary with key points"""
+    if not text:
+        return "No text provided for summarization.", []
+    
+    text = preprocess_text(text)
+    
+    if len(text.split()) < 20:
+        return "The content is too short to generate a meaningful summary.", []
+    
+    # Get key phrases
+    key_phrases = get_key_phrases(text)
+    
+    # Tokenize sentences
+    sentences = sent_tokenize(text)
+    
+    # Score sentences based on key phrases and position
     sentence_scores = {}
-    for sent in sentences:
-        for word in word_tokenize(sent.lower()):
-            if word in word_frequencies:
-                if len(sent.split(' ')) < 30:
-                    sentence_scores[sent] = sentence_scores.get(sent, 0) + word_frequencies[word]
+    for i, sent in enumerate(sentences):
+        score = 0
+        # Higher score for sentences containing key phrases
+        for phrase in key_phrases:
+            if phrase in sent.lower():
+                score += 2
+        # Higher score for first/last sentences
+        if i < 3 or i > len(sentences) - 3:
+            score += 1
+        # Higher score for medium-length sentences
+        if 15 <= len(sent.split()) <= 30:
+            score += 1
+        sentence_scores[sent] = score
+    
+    # Get top 5-7 most important sentences
+    summary_sentences = heapq.nlargest(
+        min(7, len(sentences)), 
+        sentence_scores, 
+        key=sentence_scores.get
+    )
+    
+    # Simplify language
+    summary_sentences = [simplify_language(sent) for sent in summary_sentences]
+    
+    # Organize into structured format
+    overview = ' '.join(summary_sentences[:2])
+    key_points = summary_sentences[2:-1] if len(summary_sentences) > 3 else summary_sentences[1:]
+    conclusion = summary_sentences[-1] if len(summary_sentences) > 1 else ""
+    
+    # Format for HTML display
+    structured_summary = {
+        'overview': overview,
+        'key_points': key_points,
+        'conclusion': conclusion,
+        'key_phrases': key_phrases[:10]  # Limit to 10 key phrases
+    }
+    
+    return structured_summary
 
-    summary_length = min(2, len(sentences))
-    summary_sentences = heapq.nlargest(summary_length, sentence_scores, key=sentence_scores.get)
-    summary = ' '.join(summary_sentences)
-    important_words = sorted(word_frequencies, key=word_frequencies.get, reverse=True)[:5]
+def generate_plain_summary(text):
+    """Generate plain text summary for download"""
+    if not text:
+        return "No text provided for summarization.", []
+    
+    structured = generate_structured_summary(text)
+    if isinstance(structured, str):
+        return structured, []
+    
+    plain_text = "DOCUMENT SUMMARY\n\n"
+    plain_text += "OVERVIEW:\n" + structured['overview'] + "\n\n"
+    plain_text += "KEY POINTS:\n- " + "\n- ".join(structured['key_points']) + "\n\n"
+    if structured['conclusion']:
+        plain_text += "CONCLUSION:\n" + structured['conclusion'] + "\n\n"
+    plain_text += "KEY TERMS: " + ", ".join(structured['key_phrases'])
+    
+    return plain_text, structured['key_phrases']
 
-    return summary, important_words
+def extract_main_content(soup):
+    """Extract main content from webpage using heuristics"""
+    if not soup:
+        return ""
+    
+    # Try common content containers first
+    for tag in ['article', 'main']:
+        element = soup.find(tag)
+        if element:
+            return element.get_text()
+    
+    # Try common class names
+    for class_name in ['content', 'post-content', 'article-body']:
+        element = soup.find(class_=class_name)
+        if element:
+            return element.get_text()
+    
+    # Fallback to paragraph content
+    paragraphs = soup.find_all('p')
+    content = '\n'.join(p.get_text() for p in paragraphs if len(p.get_text()) > 40)
+    
+    # If still too short, try divs with high text density
+    if len(content.split()) < 100:
+        all_divs = soup.find_all('div')
+        for div in all_divs:
+            text = div.get_text()
+            if len(text.split()) > 100:
+                return text
+    
+    return content
 
-# Final summary
-def generate_summary(text):
-    if not text or len(text.split()) < 10:
-        return text, []
-
-    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-    all_summary = []
-    all_keywords = []
-
-    for para in paragraphs:
-        summary, keywords = summarize_paragraph(para)
-        all_summary.append(summary)
-        all_keywords.extend(keywords)
-
-    final_summary = '\n'.join(all_summary)
-    unique_keywords = list(set(all_keywords))[:10]
-
-    return final_summary, unique_keywords
-
+# Routes
 @app.route('/')
-def index():
-    return redirect(url_for('login'))
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        uname = request.form['username']
-        pwd = generate_password_hash(request.form['password'])
-        db.session.add(User(username=uname, password=pwd))
-        db.session.commit()
-        return redirect(url_for('login'))
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        uname = request.form['username']
-        pwd = request.form['password']
-        user = User.query.filter_by(username=uname).first()
-        if user and check_password_hash(user.password, pwd):
-            session['user'] = uname
-            return redirect(url_for('home'))
-        else:
-            return "Wrong credentials"
-    return render_template('login.html')
-
-@app.route('/home')
 def home():
-    if 'user' not in session:
-        return redirect(url_for('login'))
     return render_template('home.html')
 
 @app.route('/summarize_text', methods=['POST', 'GET'])
 def summarize_text():
     if request.method == 'POST':
-        text = request.form['text']
-        summary, keywords = generate_summary(text)
-        session['summary_data'] = {
-            'title': 'Text Summary',
-            'summary': summary,
-            'keywords': ', '.join(keywords)
-        }
+        text = request.form.get('text', '')
+        summary, keywords = generate_plain_summary(text)
         return render_template('summarize_text.html', summary=summary, keywords=keywords)
     return render_template('summarize_text.html')
 
 @app.route('/summarize_pdf', methods=['POST', 'GET'])
 def summarize_pdf():
     if request.method == 'POST':
+        if 'pdf_file' not in request.files:
+            return render_template('summarize_pdf.html', error="No file uploaded")
+            
         file = request.files['pdf_file']
-        pdf_reader = PyPDF2.PdfReader(file)
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-        summary, keywords = generate_summary(text)
-        session['summary_data'] = {
-            'title': 'PDF Summary',
-            'summary': summary,
-            'keywords': ', '.join(keywords)
-        }
-        return render_template('summarize_pdf.html', summary=summary, keywords=keywords)
+        if file.filename == '':
+            return render_template('summarize_pdf.html', error="No file selected")
+            
+        try:
+            pdf_reader = PyPDF2.PdfReader(file)
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+            
+            if not text.strip():
+                return render_template('summarize_pdf.html', error="No text could be extracted from PDF")
+            
+            structured_summary = generate_structured_summary(text)
+            plain_summary, keywords = generate_plain_summary(text)
+            
+            return render_template(
+                'summarize_pdf.html',
+                summary=structured_summary,
+                keywords=keywords,
+                plain_summary=plain_summary
+            )
+        except Exception as e:
+            return render_template('summarize_pdf.html', error=f"Error processing PDF: {str(e)}")
     return render_template('summarize_pdf.html')
 
 @app.route('/summarize_image', methods=['POST', 'GET'])
 def summarize_image():
     if request.method == 'POST':
+        if 'image_file' not in request.files:
+            return render_template('summarize_image.html', error="No file uploaded")
+            
         image = request.files['image_file']
-        text = pytesseract.image_to_string(Image.open(image))
-        summary, keywords = generate_summary(text)
-        session['summary_data'] = {
-            'title': 'Image Summary',
-            'summary': summary,
-            'keywords': ', '.join(keywords)
-        }
-        return render_template('summarize_image.html', summary=summary, keywords=keywords)
+        if image.filename == '':
+            return render_template('summarize_image.html', error="No file selected")
+            
+        try:
+            img = Image.open(image)
+            text = pytesseract.image_to_string(img)
+            
+            if not text.strip():
+                return render_template('summarize_image.html', error="No text could be extracted from image")
+                
+            summary, keywords = generate_plain_summary(text)
+            return render_template('summarize_image.html', summary=summary, keywords=keywords)
+        except Exception as e:
+            return render_template('summarize_image.html', error=f"Error processing image: {str(e)}")
     return render_template('summarize_image.html')
 
 @app.route('/summarize_url', methods=['POST', 'GET'])
 def summarize_url():
-    title = None
-    url = None
     if request.method == 'POST':
-        url = request.form['url']
+        url = request.form.get('url', '').strip()
+        if not url:
+            return render_template('summarize_url.html', error="Please enter a URL")
+            
         try:
-            res = requests.get(url)
+            # Validate URL format
+            parsed = urlparse(url)
+            if not all([parsed.scheme, parsed.netloc]):
+                raise ValueError("Invalid URL format")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            res = requests.get(url, headers=headers, timeout=15)
+            res.raise_for_status()  # Raise exception for bad status codes
+            
             soup = BeautifulSoup(res.text, 'html.parser')
             title = soup.title.string if soup.title else "No title found"
-            paragraphs = soup.find_all('p')
-            text = '\n'.join(p.get_text() for p in paragraphs if len(p.get_text()) > 40)
-            summary, keywords = generate_summary(text)
-            session['summary_data'] = {
-                'title': title,
-                'summary': summary,
-                'keywords': ', '.join(keywords)
-            }
-            return render_template('summarize_url.html', summary=summary, keywords=keywords, title=title, url=url)
+            
+            # Extract main content
+            text = extract_main_content(soup)
+            
+            if not text.strip():
+                return render_template('summarize_url.html', error="No main content could be extracted from the page")
+            
+            # Generate concise one-paragraph summary
+            structured = generate_structured_summary(text)
+            if isinstance(structured, str):
+                summary = structured
+            else:
+                # Combine overview and key points into one paragraph
+                summary = structured['overview'] + " " + " ".join(structured['key_points'])
+                if structured['conclusion']:
+                    summary += " " + structured['conclusion']
+                
+                # Simplify further and limit to 5-7 sentences
+                sentences = sent_tokenize(summary)
+                summary = ' '.join(sentences[:7])
+                summary = simplify_language(summary)
+            
+            keywords = get_key_phrases(text)
+            
+            return render_template(
+                'summarize_url.html',
+                summary=summary,
+                keywords=keywords,
+                title=title,
+                url=url
+            )
         except Exception as e:
-            return f"Error: {str(e)}"
+            return render_template('summarize_url.html', error=f"Error processing URL: {str(e)}")
     return render_template('summarize_url.html')
 
 @app.route('/download_pdf', methods=['POST'])
 def download_pdf():
-    data = session.get('summary_data')
-    if not data:
+    title = request.form.get('title', 'Document Summary')
+    summary = request.form.get('summary', '')
+    keywords = request.form.get('keywords', '')
+
+    if not summary:
         return "No summary data to download."
 
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
 
+    # Title
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, height - 50, data.get('title', 'Summary'))
+    c.drawString(40, height - 50, title)
 
+    # Summary content
     c.setFont("Helvetica", 12)
     text_object = c.beginText(40, height - 80)
     text_object.setLeading(15)
+    
+    # Split summary into lines and add to PDF
+    for line in summary.split('\n'):
+        if line.startswith(('OVERVIEW:', 'KEY POINTS:', 'CONCLUSION:', 'KEY TERMS:')):
+            c.setFont("Helvetica-Bold", 12)
+            text_object.textLine(line)
+            c.setFont("Helvetica", 12)
+        elif line.startswith('- '):
+            text_object.textLine(line)
+        else:
+            text_object.textLine(line)
 
-    summary_lines = data.get('summary', '').split('\n')
-    for line in summary_lines:
-        text_object.textLine(line)
-
-    keywords = "Keywords: " + data.get('keywords', '')
-    text_object.textLine("")
-    text_object.textLine(keywords)
+    # Add keywords if available
+    if keywords:
+        text_object.textLine("\nKeywords: " + keywords)
 
     c.drawText(text_object)
     c.showPage()
     c.save()
 
     buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name="summary.pdf", mimetype='application/pdf')
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="document_summary.pdf",
+        mimetype='application/pdf'
+    )
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)
+    app.run(debug=False)  # Set debug=False for production
