@@ -118,12 +118,37 @@
 
     .summary-box h3 {
       color: var(--primary-color);
-      margin-bottom: 10px;
+      margin-bottom: 15px;
+      border-bottom: 1px solid var(--primary-color);
+      padding-bottom: 8px;
     }
 
-    .summary-box p {
-      color: #eee;
+    .summary-section {
+      margin-bottom: 20px;
+    }
+
+    .summary-section h4 {
+      color: var(--primary-color);
+      margin-bottom: 8px;
+    }
+
+    .summary-section ul {
+      padding-left: 20px;
+      margin-bottom: 15px;
+    }
+
+    .summary-section li {
+      margin-bottom: 8px;
       line-height: 1.5;
+    }
+
+    .keywords {
+      margin: 15px 0;
+      color: #eee;
+    }
+
+    .keywords strong {
+      color: var(--primary-color);
     }
 
     .download-btn {
@@ -161,6 +186,20 @@
         font-size: 1.5rem;
       }
     }
+
+    @media (max-width: 480px) {
+      .container {
+        margin: 30px 15px;
+      }
+
+      h2 {
+        font-size: 1.4rem;
+      }
+
+      .summary-box {
+        padding: 15px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -172,8 +211,6 @@
     <a href="{{ url_for('summarize_image') }}">Image Summarizer</a>
     <a href="{{ url_for('summarize_pdf') }}">PDF Summarizer</a>
     <a href="{{ url_for('summarize_url') }}">Summarize URL</a>
-    <a href="{{ url_for('login') }}">Login</a>
-    <a href="{{ url_for('register') }}">Register</a>
   </nav>
 
   <!-- Main Section -->
@@ -186,16 +223,36 @@
 
     {% if summary %}
     <div class="summary-box">
-      <h3>Summary:</h3>
-      <p>{{ summary }}</p>
+      <h3>Document Summary</h3>
+      
+      <div class="summary-section">
+        <h4>📌 Overview:</h4>
+        <p>{{ summary.overview }}</p>
+      </div>
+      
+      <div class="summary-section">
+        <h4>🔍 Key Points:</h4>
+        <ul>
+          {% for point in summary.key_points %}
+          <li>{{ point }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      
+      {% if summary.conclusion %}
+      <div class="summary-section">
+        <h4>🎯 Conclusion:</h4>
+        <p>{{ summary.conclusion }}</p>
+      </div>
+      {% endif %}
 
       {% if keywords %}
-      <p><strong>🔑 Keywords:</strong> {{ keywords|join(', ') }}</p>
+      <p class="keywords"><strong>🔑 Keywords:</strong> {{ keywords|join(', ') }}</p>
       {% endif %}
 
       <form method="POST" action="{{ url_for('download_pdf') }}">
         <input type="hidden" name="title" value="PDF Summary" />
-        <input type="hidden" name="summary" value="{{ summary }}" />
+        <input type="hidden" name="summary" value="{{ summary_text_for_download }}" />
         <input type="hidden" name="keywords" value="{{ keywords|join(', ') }}" />
         <button type="submit" class="download-btn">⬇️ Download as PDF</button>
       </form>
