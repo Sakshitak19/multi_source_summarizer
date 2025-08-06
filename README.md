@@ -1,4 +1,4 @@
-# 📝 Multi_Source_Summarizer  
+# 📝 Content Summarizer  
 
 This is a **text summarizer web app** that can summarize content from:  
 - ✍️ Plain Text  
@@ -7,6 +7,11 @@ This is a **text summarizer web app** that can summarize content from:
 - 🔗 URLs (web pages)  
 
 It also allows users to **download the summary** and includes a **login/register system** for a personalized experience.
+
+---
+
+## Live Demo Link  
+https://multi-source-summarizer-1.onrender.com/  
 
 ---
 
